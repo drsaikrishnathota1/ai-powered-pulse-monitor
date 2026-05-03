@@ -22,6 +22,7 @@
 		B1000000000000000000000D /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000000000000000000000D /* SettingsView.swift */; };
 		B1000000000000000000000E /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B2000000000000000000000E /* Assets.xcassets */; };
 		B1000000000000000000000F /* HealthKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B2000000000000000000000F /* HealthKit.framework */; };
+		B10000000000000000000012 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000012 /* PrivacyInfo.xcprivacy */; };
 		T10000000000000000000001 /* SignalProcessorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T20000000000000000000001 /* SignalProcessorTests.swift */; };
 		U10000000000000000000002 /* AppStoreScreenshotUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = U20000000000000000000002 /* AppStoreScreenshotUITests.swift */; };
 /* End PBXBuildFile section */
@@ -61,6 +62,7 @@
 		B2000000000000000000000F /* HealthKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = HealthKit.framework; path = System/Library/Frameworks/HealthKit.framework; sourceTree = SDKROOT; };
 		B20000000000000000000010 /* CamvitalScan.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CamvitalScan.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B20000000000000000000011 /* CamvitalScan.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CamvitalScan.entitlements; sourceTree = "<group>"; };
+		B20000000000000000000012 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		T20000000000000000000001 /* SignalProcessorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignalProcessorTests.swift; sourceTree = "<group>"; };
 		T20000000000000000000012 /* CamvitalScanTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CamvitalScanTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		U20000000000000000000002 /* AppStoreScreenshotUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStoreScreenshotUITests.swift; sourceTree = "<group>"; };
@@ -130,6 +132,7 @@
 				B2000000000000000000000D /* SettingsView.swift */,
 				B2000000000000000000000E /* Assets.xcassets */,
 				B20000000000000000000011 /* CamvitalScan.entitlements */,
+				B20000000000000000000012 /* PrivacyInfo.xcprivacy */,
 			);
 			path = CamvitalScan;
 			sourceTree = "<group>";
@@ -265,6 +268,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B1000000000000000000000E /* Assets.xcassets in Resources */,
+				B10000000000000000000012 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
