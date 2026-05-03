@@ -6,8 +6,12 @@ final class HistoryStore: ObservableObject {
 
     private let key = "pulseprime.readings.v2"
 
-    init() {
-        load()
+    init(seedReadings: [HeartReading]? = nil) {
+        if let seedReadings {
+            readings = seedReadings
+        } else {
+            load()
+        }
     }
 
     func add(_ reading: HeartReading) {

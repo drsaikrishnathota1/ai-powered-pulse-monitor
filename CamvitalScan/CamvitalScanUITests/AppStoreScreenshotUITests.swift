@@ -5,9 +5,6 @@ import XCTest
 final class AppStoreScreenshotUITests: XCTestCase {
 
     func testCapture6Point5InchScreens() throws {
-        let app = XCUIApplication()
-        app.launch()
-
         let out = URL(fileURLWithPath: "/tmp/CamvitalScanAppStoreScreenshots", isDirectory: true)
         try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
 
@@ -16,17 +13,24 @@ final class AppStoreScreenshotUITests: XCTestCase {
             try data.write(to: out.appendingPathComponent(name))
         }
 
+        func launch(tab: String) -> XCUIApplication {
+            let app = XCUIApplication()
+            app.launchArguments = ["APPSTORE_SCREENSHOTS"]
+            app.launchEnvironment["APPSTORE_TAB"] = tab
+            app.launch()
+            return app
+        }
+
+        _ = launch(tab: "measure")
         try savePNG("01_measure.png")
 
-        let tabBar = app.tabBars.firstMatch
-        XCTAssertTrue(tabBar.waitForExistence(timeout: 5))
-        tabBar.buttons["History"].tap()
+        _ = launch(tab: "history")
         try savePNG("02_history.png")
 
-        tabBar.buttons["Settings"].tap()
+        _ = launch(tab: "settings")
         try savePNG("03_settings.png")
 
-        tabBar.buttons["Measure"].tap()
+        _ = launch(tab: "measure")
         try savePNG("04_measure_again.png")
     }
 }

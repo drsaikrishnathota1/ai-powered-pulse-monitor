@@ -29,7 +29,9 @@ struct MeasureView: View {
                         header
 
                         #if targetEnvironment(simulator)
+                        if !AppLaunchConfiguration.isAppStoreScreenshotMode {
                         simulatorBanner
+                        }
                         #endif
 
                         measurementCard

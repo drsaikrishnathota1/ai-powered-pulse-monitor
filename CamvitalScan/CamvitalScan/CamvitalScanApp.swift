@@ -2,7 +2,11 @@ import SwiftUI
 
 @main
 struct CamvitalScanApp: App {
-    @StateObject private var history = HistoryStore()
+    @StateObject private var history = HistoryStore(
+        seedReadings: AppLaunchConfiguration.isAppStoreScreenshotMode
+            ? AppLaunchConfiguration.seededHistory
+            : nil
+    )
     @StateObject private var settings = SettingsStore()
     @StateObject private var healthKit = HealthKitManager()
 
