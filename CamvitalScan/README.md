@@ -11,7 +11,7 @@ Native **SwiftUI** app that estimates **heart rate (BPM)** using the rear **came
 
 1. Open `CamvitalScan.xcodeproj` in Xcode.
 2. Select your **development team** in the `CamvitalScan` target → *Signing & Capabilities*.
-3. Bundle Identifier is **`com.drsaikrishnathota1.camvital`** (must match your App ID in the Apple Developer portal).
+3. Bundle Identifier is **`com.drsaikrishnathota1.camvitalscan`** (must match your App ID in the Apple Developer portal).
 4. Add a real **App Icon** (1024×1024) in `Assets.xcassets` before App Store distribution.
 5. Build & run on your iPhone. Grant **Camera** permission; optionally enable **Health** in Settings and tap **Connect Apple Health**.
 
