@@ -11,6 +11,11 @@ struct SettingsView: View {
 
                 Form {
                     Section {
+                        trustPanel
+                    }
+                    .listRowBackground(Color.clear)
+
+                    Section {
                         Stepper(value: $settings.age, in: 12...95) {
                             Text("Age: \(settings.age)")
                         }
@@ -67,6 +72,50 @@ struct SettingsView: View {
             }
             .navigationTitle("Settings")
         }
+    }
+
+    private var trustPanel: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(PulseTheme.actionGradient)
+                    Image(systemName: "lock.shield.fill")
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(.black.opacity(0.78))
+                }
+                .frame(width: 48, height: 48)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Private wellness tracking")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                    Text("No account required. Health export is optional.")
+                        .font(.footnote)
+                        .foregroundStyle(.white.opacity(0.62))
+                }
+            }
+
+            HStack(spacing: 8) {
+                trustPill("On-device history", icon: "internaldrive")
+                trustPill("Optional Health", icon: "heart.text.square")
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(PulseTheme.cardStrong))
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(PulseTheme.stroke))
+    }
+
+    private func trustPill(_ title: String, icon: String) -> some View {
+        Label(title, systemImage: icon)
+            .font(.caption.weight(.semibold))
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
+            .foregroundStyle(.white.opacity(0.75))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 9)
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.white.opacity(0.07)))
     }
 
     private func guidanceRow(icon: String, title: String, detail: String) -> some View {

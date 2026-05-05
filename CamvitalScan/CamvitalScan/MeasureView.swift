@@ -86,18 +86,52 @@ struct MeasureView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Guided pulse scan")
-                .font(.title2.weight(.semibold))
-                .foregroundStyle(.white)
-            Text("A calm 60-second camera session with live signal quality, progress, and clear wellness guidance.")
-                .font(.subheadline)
-                .foregroundStyle(.white.opacity(0.65))
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top, spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(PulseTheme.actionGradient)
+                    Image(systemName: "waveform.path.ecg")
+                        .font(.title2.weight(.bold))
+                        .foregroundStyle(.black.opacity(0.78))
+                }
+                .frame(width: 54, height: 54)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Guided pulse scan")
+                        .font(.title2.weight(.semibold))
+                        .foregroundStyle(.white)
+                    Text("A calm 60-second camera session with live signal quality, progress, and clear wellness guidance.")
+                        .font(.subheadline)
+                        .foregroundStyle(.white.opacity(0.68))
+                }
+            }
+
+            HStack(spacing: 8) {
+                scanPill("60 sec", icon: "timer")
+                scanPill("On device", icon: "lock.shield")
+                scanPill("Wellness", icon: "heart.text.square")
+            }
+
             Text("For wellness tracking only. Not a medical device or emergency monitor.")
                 .font(.caption)
-                .foregroundStyle(.white.opacity(0.5))
+                .foregroundStyle(.white.opacity(0.55))
         }
+        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(PulseTheme.cardStrong))
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(PulseTheme.stroke))
+    }
+
+    private func scanPill(_ text: String, icon: String) -> some View {
+        Label(text, systemImage: icon)
+            .font(.caption.weight(.semibold))
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .foregroundStyle(.white.opacity(0.78))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(Capsule().fill(Color.white.opacity(0.08)))
     }
 
     #if targetEnvironment(simulator)
@@ -118,14 +152,12 @@ struct MeasureView: View {
 
     private var measurementCard: some View {
         VStack(spacing: 18) {
-            if isMeasuring {
-                Text("Remaining \(secondsLeft / 60):\(String(format: "%02d", secondsLeft % 60))")
-                    .font(.subheadline.monospacedDigit().weight(.semibold))
-                    .foregroundStyle(PulseTheme.accent)
-            } else {
-                Text("Session: 1:00")
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.white.opacity(0.55))
+            HStack(spacing: 10) {
+                statusBadge
+                Spacer()
+                Text(isMeasuring ? "\(secondsLeft / 60):\(String(format: "%02d", secondsLeft % 60))" : "1:00")
+                    .font(.headline.monospacedDigit().weight(.bold))
+                    .foregroundStyle(isMeasuring ? PulseTheme.accent : .white.opacity(0.72))
             }
 
             ZStack {
@@ -151,7 +183,7 @@ struct MeasureView: View {
                         .font(.system(size: 56, weight: .bold, design: .rounded))
                         .foregroundStyle(.white)
                         .contentTransition(.numericText())
-                    Text("BPM")
+                    Text(isMeasuring ? "LIVE BPM" : "BPM")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.white.opacity(0.55))
 
@@ -169,10 +201,7 @@ struct MeasureView: View {
                 }
             }
 
-            Text("Final BPM uses the whole minute (skips the first few seconds for settle-in).")
-                .font(.caption2)
-                .foregroundStyle(.white.opacity(0.45))
-                .multilineTextAlignment(.center)
+            readinessStrip
 
             waveform
 
@@ -183,7 +212,7 @@ struct MeasureView: View {
                     .padding(.vertical, 16)
                     .background(
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(isMeasuring ? Color.red.opacity(0.85) : PulseTheme.accent.opacity(0.9))
+                            .fill(isMeasuring ? PulseTheme.dangerGradient : PulseTheme.actionGradient)
                     )
                     .foregroundStyle(.black.opacity(isMeasuring ? 0.95 : 0.9))
             }
@@ -203,6 +232,46 @@ struct MeasureView: View {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .stroke(PulseTheme.stroke)
         )
+    }
+
+    private var statusBadge: some View {
+        Label(isMeasuring ? "Scanning" : "Ready", systemImage: isMeasuring ? "dot.radiowaves.left.and.right" : "checkmark.seal.fill")
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(isMeasuring ? PulseTheme.accent : PulseTheme.success)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Capsule().fill(Color.white.opacity(0.08)))
+    }
+
+    private var readinessStrip: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Scan readiness")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.58))
+                Spacer()
+                Text("Final BPM uses the full minute")
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.42))
+            }
+
+            HStack(spacing: 8) {
+                readinessItem("Cover lens", icon: "camera.metering.center.weighted")
+                readinessItem("Stay still", icon: "hand.raised.fill")
+                readinessItem("Gentle grip", icon: "sparkles")
+            }
+        }
+    }
+
+    private func readinessItem(_ title: String, icon: String) -> some View {
+        Label(title, systemImage: icon)
+            .font(.caption2.weight(.semibold))
+            .lineLimit(1)
+            .minimumScaleFactor(0.72)
+            .foregroundStyle(.white.opacity(0.7))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 9)
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.white.opacity(0.055)))
     }
 
     private func sessionMessageCard(_ message: SessionMessage) -> some View {
@@ -281,7 +350,7 @@ struct MeasureView: View {
             Label("Tips for a clean read", systemImage: "hand.raised.fill")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.white)
-            bullet("Cover the back camera and flash gently—don’t press too hard.")
+            bullet("Cover the back camera and flash gently; avoid pressing too hard.")
             bullet("Hold still for the full minute; movement is the main cause of low signal quality.")
             bullet("Rest before measuring; avoid coffee or sprinting right before a resting read.")
         }

@@ -1,3 +1,4 @@
+import Charts
 import SwiftUI
 
 struct HistoryView: View {
@@ -19,34 +20,10 @@ struct HistoryView: View {
                 } else {
                     List {
                         summarySection
+                        trendSection
 
                         ForEach(history.readings) { r in
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack {
-                                    Text("\(r.bpm) BPM")
-                                        .font(.title3.weight(.bold))
-                                        .foregroundStyle(.white)
-                                    Spacer()
-                                    Text(r.date.formatted(date: .abbreviated, time: .shortened))
-                                        .font(.caption)
-                                        .foregroundStyle(.white.opacity(0.55))
-                                }
-                                HStack(spacing: 10) {
-                                    Text(r.durationSeconds >= 60 ? "1 min" : "\(r.durationSeconds)s")
-                                        .font(.caption.weight(.semibold))
-                                        .padding(.horizontal, 10)
-                                        .padding(.vertical, 4)
-                                        .background(Capsule().fill(Color.white.opacity(0.08)))
-                                    Text("Quality \(Int(r.quality * 100))%")
-                                        .font(.caption)
-                                        .foregroundStyle(.white.opacity(0.55))
-                                    Spacer()
-                                    let zone = PulseHeartZone.zone(for: r.bpm, age: settings.age)
-                                    Text(zone.title)
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(.white.opacity(0.75))
-                                }
-                            }
+                            readingRow(r)
                             .listRowBackground(Color.white.opacity(0.06))
                         }
                         .onDelete(perform: history.delete)
@@ -56,6 +33,96 @@ struct HistoryView: View {
             }
             .navigationTitle("History")
         }
+    }
+
+    private var trendSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Label("Pulse trend", systemImage: "chart.xyaxis.line")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+                    Spacer()
+                    Text("\(history.readings.count) scans")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.5))
+                }
+
+                Chart {
+                    ForEach(Array(history.readings.reversed())) { reading in
+                        LineMark(
+                            x: .value("Date", reading.date),
+                            y: .value("BPM", reading.bpm)
+                        )
+                        .foregroundStyle(PulseTheme.waveGradient)
+                        .interpolationMethod(.catmullRom)
+
+                        PointMark(
+                            x: .value("Date", reading.date),
+                            y: .value("BPM", reading.bpm)
+                        )
+                        .foregroundStyle(PulseTheme.accent)
+                    }
+                }
+                .chartXAxis(.hidden)
+                .chartYAxis {
+                    AxisMarks(position: .leading) { value in
+                        AxisGridLine().foregroundStyle(Color.white.opacity(0.08))
+                        AxisValueLabel()
+                            .font(.caption2)
+                            .foregroundStyle(.white.opacity(0.45))
+                    }
+                }
+                .frame(height: 150)
+
+                Text("Use repeated readings in similar conditions to understand your personal wellness pattern.")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.55))
+            }
+            .padding(14)
+            .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 8, trailing: 0))
+            .listRowBackground(Color.clear)
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(PulseTheme.cardStrong))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(PulseTheme.stroke))
+        }
+    }
+
+    private func readingRow(_ reading: HeartReading) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("\(reading.bpm)")
+                    .font(.title2.monospacedDigit().weight(.bold))
+                    .foregroundStyle(.white)
+                Text("BPM")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.white.opacity(0.48))
+                Spacer()
+                Text(reading.date.formatted(date: .abbreviated, time: .shortened))
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.55))
+            }
+
+            HStack(spacing: 10) {
+                let zone = PulseHeartZone.zone(for: reading.bpm, age: settings.age)
+                Text(zone.title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.82))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Capsule().fill(Color.white.opacity(0.08)))
+
+                Label("\(Int(reading.quality * 100))%", systemImage: "waveform.path")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.58))
+
+                Spacer()
+
+                Text(reading.durationSeconds >= 60 ? "1 min" : "\(reading.durationSeconds)s")
+                    .font(.caption.monospacedDigit().weight(.medium))
+                    .foregroundStyle(.white.opacity(0.5))
+            }
+        }
+        .padding(.vertical, 6)
     }
 
     private var summarySection: some View {
