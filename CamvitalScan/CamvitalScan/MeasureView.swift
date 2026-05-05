@@ -13,6 +13,7 @@ struct MeasureView: View {
     @State private var progress: Double = 0
     @State private var secondsLeft: Int = Int(MeasurementConstants.captureDurationSeconds)
     @State private var showDenied = false
+    @State private var sessionMessage: SessionMessage?
 
     private let timer = Timer.publish(every: 0.05, on: .main, in: .common).autoconnect()
     private let successHaptic = UINotificationFeedbackGenerator()
@@ -35,6 +36,10 @@ struct MeasureView: View {
                         #endif
 
                         measurementCard
+
+                        if let sessionMessage {
+                            sessionMessageCard(sessionMessage)
+                        }
 
                         if let err = engine.cameraError {
                             Text(err)
@@ -82,13 +87,13 @@ struct MeasureView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Optical pulse")
+            Text("Guided pulse scan")
                 .font(.title2.weight(.semibold))
                 .foregroundStyle(.white)
-            Text("One guided 60-second capture, then a refined BPM from the full recording.")
+            Text("A calm 60-second camera session with live signal quality, progress, and clear wellness guidance.")
                 .font(.subheadline)
                 .foregroundStyle(.white.opacity(0.65))
-            Text("Session = 1 minute (60 seconds), not 60 minutes—continuous hour-long flash PPG is not supported.")
+            Text("For wellness tracking only. Not a medical device or emergency monitor.")
                 .font(.caption)
                 .foregroundStyle(.white.opacity(0.5))
         }
@@ -101,7 +106,7 @@ struct MeasureView: View {
             Image(systemName: "iphone.gen3")
                 .font(.title3)
                 .foregroundStyle(PulseTheme.accent)
-            Text("Simulator has no camera. Build on a physical iPhone to measure real heart rate.")
+            Text("Simulator has no camera. Build on a physical device to measure a live pulse.")
                 .font(.footnote)
                 .foregroundStyle(.white.opacity(0.85))
         }
@@ -172,12 +177,12 @@ struct MeasureView: View {
             waveform
 
             Button(action: toggleMeasure) {
-                Text(isMeasuring ? "Stop" : "Start 1-minute measurement")
+                Label(isMeasuring ? "Stop session" : "Start 1-minute scan", systemImage: isMeasuring ? "stop.fill" : "waveform.path.ecg")
                     .font(.headline)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
                     .background(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
                             .fill(isMeasuring ? Color.red.opacity(0.85) : PulseTheme.accent.opacity(0.9))
                     )
                     .foregroundStyle(.black.opacity(isMeasuring ? 0.95 : 0.9))
@@ -198,6 +203,30 @@ struct MeasureView: View {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .stroke(PulseTheme.stroke)
         )
+    }
+
+    private func sessionMessageCard(_ message: SessionMessage) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: message.icon)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(message.tint)
+                .frame(width: 28)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(message.title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                Text(message.detail)
+                    .font(.footnote)
+                    .foregroundStyle(.white.opacity(0.68))
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(PulseTheme.card))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(PulseTheme.stroke))
     }
 
     private var qualityBar: some View {
@@ -253,7 +282,7 @@ struct MeasureView: View {
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.white)
             bullet("Cover the back camera and flash gently—don’t press too hard.")
-            bullet("Hold still for the full minute; motion is the main enemy of clean PPG.")
+            bullet("Hold still for the full minute; movement is the main cause of low signal quality.")
             bullet("Rest before measuring; avoid coffee or sprinting right before a resting read.")
         }
         .padding(16)
@@ -295,6 +324,7 @@ struct MeasureView: View {
     }
 
     private func beginMeasurement() {
+        sessionMessage = nil
         engine.start()
         isMeasuring = true
         startDate = .now
@@ -310,6 +340,7 @@ struct MeasureView: View {
         secondsLeft = Int(captureDuration)
 
         if cancelled {
+            sessionMessage = .cancelled
             engine.stop()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
                 engine.resetBuffers()
@@ -319,6 +350,7 @@ struct MeasureView: View {
 
         engine.finalizeAndStop { bpm, quality in
             guard let bpm, quality >= 0.22 else {
+                sessionMessage = .lowSignal
                 engine.resetBuffers()
                 return
             }
@@ -328,6 +360,7 @@ struct MeasureView: View {
                 durationSeconds: Int(MeasurementConstants.captureDurationSeconds)
             )
             history.add(reading)
+            sessionMessage = .saved(bpm: bpm, quality: quality)
             successHaptic.notificationOccurred(.success)
 
             if settings.saveToHealth {
@@ -338,5 +371,39 @@ struct MeasureView: View {
 
             engine.resetBuffers()
         }
+    }
+}
+
+private struct SessionMessage {
+    let title: String
+    let detail: String
+    let icon: String
+    let tint: Color
+
+    static var cancelled: SessionMessage {
+        SessionMessage(
+            title: "Session stopped",
+            detail: "No reading was saved. Start again when your hand is steady and the camera is fully covered.",
+            icon: "pause.circle.fill",
+            tint: .orange
+        )
+    }
+
+    static var lowSignal: SessionMessage {
+        SessionMessage(
+            title: "Signal was too low",
+            detail: "Try again with a relaxed grip, warm hands, and less movement during the full minute.",
+            icon: "exclamationmark.triangle.fill",
+            tint: .orange
+        )
+    }
+
+    static func saved(bpm: Int, quality: Double) -> SessionMessage {
+        SessionMessage(
+            title: "\(bpm) BPM saved",
+            detail: "Signal quality \(Int(quality * 100))%. Use trends over time rather than one reading for wellness awareness.",
+            icon: "checkmark.circle.fill",
+            tint: PulseTheme.accent
+        )
     }
 }
