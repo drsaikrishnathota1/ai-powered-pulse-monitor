@@ -20,6 +20,7 @@ final class HeartRateEngine: NSObject, ObservableObject {
     private var times: [Double] = []
     private var sessionStart: CFTimeInterval?
     private var frameCount = 0
+    private var torchWatchdog: DispatchSourceTimer?
     /// ~2.5 minutes at 30 fps — enough for a full 60 s capture plus margin.
     private let maxSamples = 4500
     private let waveformDisplayCount = 220
@@ -131,6 +132,11 @@ final class HeartRateEngine: NSObject, ObservableObject {
 
         do {
             try device.lockForConfiguration()
+            let targetFrameDuration = CMTime(value: 1, timescale: 30)
+            if device.activeFormat.videoSupportedFrameRateRanges.contains(where: { $0.minFrameRate <= 30 && 30 <= $0.maxFrameRate }) {
+                device.activeVideoMinFrameDuration = targetFrameDuration
+                device.activeVideoMaxFrameDuration = targetFrameDuration
+            }
             if device.isFocusModeSupported(.continuousAutoFocus) {
                 device.focusMode = .continuousAutoFocus
             }
@@ -138,7 +144,7 @@ final class HeartRateEngine: NSObject, ObservableObject {
                 device.exposureMode = .continuousAutoExposure
             }
             if device.hasTorch, device.isTorchModeSupported(.on) {
-                try device.setTorchModeOn(level: AVCaptureDevice.maxAvailableTorchLevel)
+                try device.setTorchModeOn(level: min(0.75, AVCaptureDevice.maxAvailableTorchLevel))
             }
             device.unlockForConfiguration()
         } catch {
@@ -149,6 +155,7 @@ final class HeartRateEngine: NSObject, ObservableObject {
 
         sessionStart = CACurrentMediaTime()
         session.startRunning()
+        startTorchWatchdog()
 
         DispatchQueue.main.async {
             self.isRunning = true
@@ -157,6 +164,8 @@ final class HeartRateEngine: NSObject, ObservableObject {
     }
 
     private func tearDown() {
+        torchWatchdog?.cancel()
+        torchWatchdog = nil
         output.setSampleBufferDelegate(nil, queue: nil)
         if session.isRunning {
             session.stopRunning()
@@ -186,6 +195,34 @@ final class HeartRateEngine: NSObject, ObservableObject {
         DispatchQueue.main.async {
             self.isRunning = false
             self.torchWarmWarning = false
+        }
+    }
+
+    private func startTorchWatchdog() {
+        torchWatchdog?.cancel()
+        guard let device, device.hasTorch, device.isTorchModeSupported(.on) else { return }
+
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now() + 0.5, repeating: 1.0)
+        timer.setEventHandler { [weak self] in
+            self?.ensureTorchIsOn()
+        }
+        torchWatchdog = timer
+        timer.resume()
+    }
+
+    private func ensureTorchIsOn() {
+        guard let device, session.isRunning, device.hasTorch, device.isTorchModeSupported(.on) else { return }
+        guard !device.isTorchActive || device.torchMode != .on else { return }
+
+        do {
+            try device.lockForConfiguration()
+            try device.setTorchModeOn(level: min(0.75, AVCaptureDevice.maxAvailableTorchLevel))
+            device.unlockForConfiguration()
+        } catch {
+            DispatchQueue.main.async {
+                self.cameraError = "LED flash could not stay on. Let the phone cool and try again."
+            }
         }
     }
 
@@ -223,22 +260,18 @@ final class HeartRateEngine: NSObject, ObservableObject {
     private func estimateBPM(estimatedFPS: Double) {
         guard samples.count > Int(estimatedFPS * 4) else { return }
 
-        let detrended = SignalProcessor.detrend(samples, baselineWindow: Int(estimatedFPS * 0.75))
-        let smoothed = SignalProcessor.smooth(detrended, window: 3)
-        let minDist = max(8, Int(estimatedFPS * 0.32))
-        let peaks = SignalProcessor.peakIndices(smoothed, minDistance: minDist, sensitivity: 0.4)
-
-        let duration = (times.last ?? 0) - (times.first ?? 0)
-        let q = SignalProcessor.quality(signal: smoothed, sampleRate: estimatedFPS, duration: max(duration, 0.1))
-
-        var nextBPM: Int?
-        if let raw = SignalProcessor.bpm(from: peaks, times: times), raw > 36, raw < 220 {
-            nextBPM = Int(round(raw))
-        }
+        let recentCount = min(samples.count, Int(estimatedFPS * 18))
+        let recentSamples = Array(samples.suffix(recentCount))
+        let recentTimes = Array(times.suffix(recentCount))
+        let result = SignalProcessor.liveEstimate(
+            samples: recentSamples,
+            times: recentTimes,
+            estimatedFPS: estimatedFPS
+        )
 
         DispatchQueue.main.async {
-            self.quality = q
-            if let b = nextBPM {
+            self.quality = result.quality
+            if let b = result.bpm, result.quality >= 0.32 {
                 self.bpm = b
             }
         }

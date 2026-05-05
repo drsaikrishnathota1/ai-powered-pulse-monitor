@@ -418,7 +418,7 @@ struct MeasureView: View {
         }
 
         engine.finalizeAndStop { bpm, quality in
-            guard let bpm, quality >= 0.22 else {
+            guard let bpm, quality >= 0.35 else {
                 sessionMessage = .lowSignal
                 engine.resetBuffers()
                 return
@@ -461,7 +461,7 @@ private struct SessionMessage {
     static var lowSignal: SessionMessage {
         SessionMessage(
             title: "Signal was too low",
-            detail: "Try again with a relaxed grip, warm hands, and less movement during the full minute.",
+            detail: "Try again with the rear camera and LED fully covered, a relaxed grip, warm hands, and less movement during the full minute.",
             icon: "exclamationmark.triangle.fill",
             tint: .orange
         )

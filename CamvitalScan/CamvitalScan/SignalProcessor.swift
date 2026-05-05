@@ -1,6 +1,14 @@
 import Foundation
 
 enum SignalProcessor {
+    private static let minimumBPM = 42.0
+    private static let maximumBPM = 180.0
+
+    struct Estimate {
+        let bpm: Int?
+        let quality: Double
+    }
+
     /// Moving average (simple).
     static func smooth(_ values: [Double], window: Int) -> [Double] {
         guard !values.isEmpty, window > 1 else { return values }
@@ -65,37 +73,55 @@ enum SignalProcessor {
         guard signal.count > 30 else { return 0 }
         let mean = signal.reduce(0, +) / Double(signal.count)
         let std = sqrt(signal.map { pow($0 - mean, 2) }.reduce(0, +) / Double(signal.count))
-        let snr = std / max(abs(mean), 1e-3)
-        let snrScore = min(1, snr * 4)
+        let amplitudeScore = min(1, std / 0.35)
         let expectedBeats = duration * 1.2
         let peaks = peakIndices(detrend(signal, baselineWindow: Int(sampleRate)), minDistance: Int(sampleRate * 0.35), sensitivity: 0.35)
         let beatScore = 1 - min(1, abs(Double(peaks.count) - expectedBeats) / max(expectedBeats, 1))
-        return max(0, min(1, 0.55 * snrScore + 0.45 * beatScore))
+        return max(0, min(1, 0.45 * amplitudeScore + 0.55 * beatScore))
+    }
+
+    /// Live estimate from a shorter moving window. Returns nil unless the signal is plausible.
+    static func liveEstimate(samples: [Double], times: [Double], estimatedFPS: Double) -> Estimate {
+        estimate(samples: samples, times: times, estimatedFPS: estimatedFPS, warmupSeconds: 1.0, minimumSeconds: 10.0)
     }
 
     /// End-of-session BPM + quality using the full buffer (skips first ~5s for settle-in).
-    static func finalEstimate(samples: [Double], times: [Double], estimatedFPS: Double) -> (bpm: Int?, quality: Double) {
-        guard samples.count == times.count, samples.count > Int(estimatedFPS * 18) else { return (nil, 0) }
+    static func finalEstimate(samples: [Double], times: [Double], estimatedFPS: Double) -> Estimate {
+        estimate(samples: samples, times: times, estimatedFPS: estimatedFPS, warmupSeconds: 5.0, minimumSeconds: 18.0)
+    }
 
-        let warmup = min(Int(estimatedFPS * 5), samples.count / 5)
+    private static func estimate(
+        samples: [Double],
+        times: [Double],
+        estimatedFPS: Double,
+        warmupSeconds: Double,
+        minimumSeconds: Double
+    ) -> Estimate {
+        guard samples.count == times.count, samples.count > Int(estimatedFPS * minimumSeconds) else {
+            return Estimate(bpm: nil, quality: 0)
+        }
+
+        let warmup = min(Int(estimatedFPS * warmupSeconds), samples.count / 5)
         let s = Array(samples.dropFirst(warmup))
         let t = Array(times.dropFirst(warmup))
-        guard s.count > Int(estimatedFPS * 12) else { return (nil, 0) }
+        guard s.count > Int(estimatedFPS * max(6.0, minimumSeconds - warmupSeconds)) else {
+            return Estimate(bpm: nil, quality: 0)
+        }
 
         let baselineWin = min(Int(estimatedFPS * 0.9), max(30, s.count / 8))
         let detrended = detrend(s, baselineWindow: baselineWin)
         let smoothed = smooth(detrended, window: 5)
-        let minDist = max(8, Int(estimatedFPS * 0.28))
-        let peaks = peakIndices(smoothed, minDistance: minDist, sensitivity: 0.32)
+        let minDist = max(8, Int(estimatedFPS * 60.0 / maximumBPM * 0.82))
+        let peaks = peakIndices(smoothed, minDistance: minDist, sensitivity: 0.38)
 
         let duration = (t.last ?? 0) - (t.first ?? 0)
         let qLegacy = quality(signal: smoothed, sampleRate: estimatedFPS, duration: max(duration, 0.1))
 
         guard peaks.count >= 4 else {
             if let v = bpm(from: peaks, times: t), v > 38, v < 210 {
-                return (Int(round(v)), max(0, min(1, qLegacy * 0.85)))
+                return Estimate(bpm: Int(round(v)), quality: max(0, min(1, qLegacy * 0.45)))
             }
-            return (nil, qLegacy * 0.5)
+            return Estimate(bpm: nil, quality: qLegacy * 0.35)
         }
 
         var bpms: [Double] = []
@@ -114,10 +140,23 @@ enum SignalProcessor {
         } else if let v = bpm(from: peaks, times: t) {
             medianBpm = v
         } else {
-            return (nil, qLegacy * 0.55)
+            return Estimate(bpm: nil, quality: qLegacy * 0.45)
         }
 
-        guard let med = medianBpm, med > 40, med < 200 else { return (nil, qLegacy * 0.45) }
+        guard let med = medianBpm, med >= minimumBPM, med <= maximumBPM else {
+            return Estimate(bpm: nil, quality: qLegacy * 0.35)
+        }
+
+        let spectral = spectralEstimate(signal: smoothed, sampleRate: estimatedFPS)
+        guard let spectralBPM = spectral.bpm else {
+            return Estimate(bpm: nil, quality: qLegacy * 0.45)
+        }
+
+        let agreement = abs(spectralBPM - med)
+        guard agreement <= 14 else {
+            let q = max(0, min(1, 0.25 * qLegacy + 0.35 * spectral.dominance))
+            return Estimate(bpm: nil, quality: q)
+        }
 
         let bpmSpread: Double
         if bpms.count >= 5 {
@@ -130,10 +169,69 @@ enum SignalProcessor {
         }
 
         let qStability = 1 - min(1, bpmSpread / max(med * 0.12, 2))
-        let mean = smoothed.reduce(0, +) / Double(smoothed.count)
-        let std = sqrt(smoothed.map { pow($0 - mean, 2) }.reduce(0, +) / Double(max(smoothed.count - 1, 1)))
-        let qSnr = min(1, std / max(abs(mean), 1e-3) * 3.2)
-        let finalQ = max(0, min(1, 0.42 * qLegacy + 0.38 * qStability + 0.2 * qSnr))
-        return (Int(round(med)), finalQ)
+        let mean = s.reduce(0, +) / Double(s.count)
+        let rawStd = sqrt(s.map { pow($0 - mean, 2) }.reduce(0, +) / Double(max(s.count - 1, 1)))
+        let amplitudeScore = min(1, rawStd / 0.75)
+        let agreementScore = 1 - min(1, agreement / 14)
+        let finalQ = max(
+            0,
+            min(
+                1,
+                0.24 * qLegacy
+                    + 0.28 * qStability
+                    + 0.28 * spectral.dominance
+                    + 0.10 * amplitudeScore
+                    + 0.10 * agreementScore
+            )
+        )
+
+        guard finalQ >= 0.28 else {
+            return Estimate(bpm: nil, quality: finalQ)
+        }
+
+        let blended = 0.62 * med + 0.38 * spectralBPM
+        return Estimate(bpm: Int(round(blended)), quality: finalQ)
+    }
+
+    private static func spectralEstimate(signal: [Double], sampleRate: Double) -> (bpm: Double?, dominance: Double) {
+        guard signal.count > Int(sampleRate * 6), sampleRate > 0 else { return (nil, 0) }
+
+        let mean = signal.reduce(0, +) / Double(signal.count)
+        let centered = signal.map { $0 - mean }
+        let maxLag = max(2, Int(sampleRate * 60.0 / minimumBPM))
+        let minLag = max(1, Int(sampleRate * 60.0 / maximumBPM))
+        guard maxLag > minLag, centered.count > maxLag + 2 else { return (nil, 0) }
+
+        var bestLag = minLag
+        var bestCorrelation = -Double.infinity
+        var correlations: [Double] = []
+
+        for lag in minLag...maxLag {
+            var numerator = 0.0
+            var leftEnergy = 0.0
+            var rightEnergy = 0.0
+            for i in lag..<centered.count {
+                let a = centered[i]
+                let b = centered[i - lag]
+                numerator += a * b
+                leftEnergy += a * a
+                rightEnergy += b * b
+            }
+            let correlation = numerator / max(sqrt(leftEnergy * rightEnergy), 1e-9)
+            correlations.append(correlation)
+            if correlation > bestCorrelation {
+                bestCorrelation = correlation
+                bestLag = lag
+            }
+        }
+
+        let positive = correlations.map { max(0, $0) }
+        let average = positive.reduce(0, +) / Double(max(positive.count, 1))
+        let dominance = max(0, min(1, (max(0, bestCorrelation) - average) / 0.42))
+        let bpm = 60.0 * sampleRate / Double(bestLag)
+        guard bpm >= minimumBPM, bpm <= maximumBPM, dominance > 0.08 else {
+            return (nil, dominance)
+        }
+        return (bpm, dominance)
     }
 }
