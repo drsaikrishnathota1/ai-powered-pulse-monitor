@@ -4,7 +4,7 @@
 Camvital Scan
 
 ## Subtitle
-Camera pulse and wellness tracker
+Camera pulse wellness tracker
 
 ## Category
 Health & Fitness
