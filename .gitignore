@@ -20,3 +20,7 @@ xcuserdata/
 # Local iOS export zips (optional)
 CamvitalScan-iOS.zip
 PulsePrime-iOS.zip
+
+# Local tooling / temp
+.tmp/
+.gitfile/
