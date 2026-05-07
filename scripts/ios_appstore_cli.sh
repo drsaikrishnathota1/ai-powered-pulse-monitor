@@ -15,7 +15,7 @@ SCHEME="${SCHEME:-CamvitalScan}"
 TEAM="${DEVELOPMENT_TEAM:-Q976JY4DNU}"
 ARCHIVE="${ARCHIVE:-$HOME/Desktop/CamvitalScan.xcarchive}"
 EXPORT_DIR="${EXPORT_DIR:-$HOME/Desktop/CamvitalExport}"
-EXPORT_PLIST="${EXPORT_PLIST:-$ROOT/CamvitalScan/ExportOptions-appstore.plist}"
+EXPORT_PLIST="${EXPORT_PLIST:-$ROOT/CamvitalScan/ExportOptions-AppStore.plist}"
 
 API_KEY_ID="${APPSTORE_API_KEY:?Set APPSTORE_API_KEY}"
 API_ISSUER="${APPSTORE_ISSUER:?Set APPSTORE_ISSUER}"
