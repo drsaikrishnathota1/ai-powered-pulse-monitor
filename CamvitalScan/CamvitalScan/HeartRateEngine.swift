@@ -21,6 +21,7 @@ final class HeartRateEngine: NSObject, ObservableObject {
     private var sessionStart: CFTimeInterval?
     private var frameCount = 0
     private var torchWatchdog: DispatchSourceTimer?
+    private var exposureLockTimer: DispatchSourceTimer?
     /// ~2.5 minutes at 30 fps — enough for a full 60 s capture plus margin.
     private let maxSamples = 4500
     private let waveformDisplayCount = 220
@@ -156,6 +157,7 @@ final class HeartRateEngine: NSObject, ObservableObject {
         sessionStart = CACurrentMediaTime()
         session.startRunning()
         startTorchWatchdog()
+        scheduleExposureLock(afterSeconds: 3.0)
 
         DispatchQueue.main.async {
             self.isRunning = true
@@ -163,9 +165,34 @@ final class HeartRateEngine: NSObject, ObservableObject {
         }
     }
 
+    /// Lock focus and exposure so auto-adjustments don't suppress the PPG signal.
+    private func scheduleExposureLock(afterSeconds delay: Double) {
+        exposureLockTimer?.cancel()
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now() + delay)
+        timer.setEventHandler { [weak self] in
+            guard let self, let device = self.device, self.session.isRunning else { return }
+            do {
+                try device.lockForConfiguration()
+                if device.isExposureModeSupported(.locked) {
+                    device.exposureMode = .locked
+                }
+                if device.isFocusModeSupported(.locked) {
+                    device.focusMode = .locked
+                }
+                device.unlockForConfiguration()
+            } catch {}
+            self.exposureLockTimer = nil
+        }
+        exposureLockTimer = timer
+        timer.resume()
+    }
+
     private func tearDown() {
         torchWatchdog?.cancel()
         torchWatchdog = nil
+        exposureLockTimer?.cancel()
+        exposureLockTimer = nil
         output.setSampleBufferDelegate(nil, queue: nil)
         if session.isRunning {
             session.stopRunning()

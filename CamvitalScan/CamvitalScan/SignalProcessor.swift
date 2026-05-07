@@ -112,7 +112,7 @@ enum SignalProcessor {
         let detrended = detrend(s, baselineWindow: baselineWin)
         let smoothed = smooth(detrended, window: 5)
         let minDist = max(8, Int(estimatedFPS * 60.0 / maximumBPM * 0.82))
-        let peaks = peakIndices(smoothed, minDistance: minDist, sensitivity: 0.38)
+        let peaks = peakIndices(smoothed, minDistance: minDist, sensitivity: 0.25)
 
         let duration = (t.last ?? 0) - (t.first ?? 0)
         let qLegacy = quality(signal: smoothed, sampleRate: estimatedFPS, duration: max(duration, 0.1))
@@ -130,7 +130,7 @@ enum SignalProcessor {
             let b = peaks[i]
             guard a >= 0, b < t.count, b > a else { continue }
             let dt = t[b] - t[a]
-            if dt > 0.35, dt < 2.0 { bpms.append(60.0 / dt) }
+            if dt > 0.28, dt < 2.0 { bpms.append(60.0 / dt) }
         }
 
         let medianBpm: Double?
@@ -153,7 +153,7 @@ enum SignalProcessor {
         }
 
         let agreement = abs(spectralBPM - med)
-        guard agreement <= 14 else {
+        guard agreement <= 20 else {
             let q = max(0, min(1, 0.25 * qLegacy + 0.35 * spectral.dominance))
             return Estimate(bpm: nil, quality: q)
         }
@@ -185,7 +185,7 @@ enum SignalProcessor {
             )
         )
 
-        guard finalQ >= 0.28 else {
+        guard finalQ >= 0.18 else {
             return Estimate(bpm: nil, quality: finalQ)
         }
 
@@ -227,9 +227,9 @@ enum SignalProcessor {
 
         let positive = correlations.map { max(0, $0) }
         let average = positive.reduce(0, +) / Double(max(positive.count, 1))
-        let dominance = max(0, min(1, (max(0, bestCorrelation) - average) / 0.42))
+        let dominance = max(0, min(1, (max(0, bestCorrelation) - average) / 0.30))
         let bpm = 60.0 * sampleRate / Double(bestLag)
-        guard bpm >= minimumBPM, bpm <= maximumBPM, dominance > 0.08 else {
+        guard bpm >= minimumBPM, bpm <= maximumBPM, dominance > 0.04 else {
             return (nil, dominance)
         }
         return (bpm, dominance)
