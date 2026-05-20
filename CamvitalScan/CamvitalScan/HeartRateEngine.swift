@@ -22,6 +22,8 @@ final class HeartRateEngine: NSObject, ObservableObject {
     private var frameCount = 0
     private var torchWatchdog: DispatchSourceTimer?
     private var exposureLockTimer: DispatchSourceTimer?
+    private var lastAcceptedLiveBPM: Int?
+    private var lastAcceptedLiveQuality: Double = 0
     /// ~2.5 minutes at 30 fps — enough for a full 60 s capture plus margin.
     private let maxSamples = 4500
     private let waveformDisplayCount = 220
@@ -34,6 +36,8 @@ final class HeartRateEngine: NSObject, ObservableObject {
             self.times.removeAll()
             self.sessionStart = nil
             self.frameCount = 0
+            self.lastAcceptedLiveBPM = nil
+            self.lastAcceptedLiveQuality = 0
             DispatchQueue.main.async {
                 self.bpm = nil
                 self.quality = 0
@@ -55,6 +59,8 @@ final class HeartRateEngine: NSObject, ObservableObject {
             self?.times.removeAll()
             self?.sessionStart = nil
             self?.frameCount = 0
+            self?.lastAcceptedLiveBPM = nil
+            self?.lastAcceptedLiveQuality = 0
             DispatchQueue.main.async {
                 self?.bpm = nil
                 self?.waveform = []
@@ -83,9 +89,17 @@ final class HeartRateEngine: NSObject, ObservableObject {
                 times: self.times,
                 estimatedFPS: fpsClamped
             )
+            let resolved = MeasurementResultResolver.resolve(
+                finalBPM: result.bpm,
+                finalQuality: result.quality,
+                liveFallbackBPM: self.lastAcceptedLiveBPM,
+                liveFallbackQuality: self.lastAcceptedLiveQuality
+            )
             self.tearDown()
             DispatchQueue.main.async {
-                completion(result.bpm, result.quality)
+                self.bpm = resolved.bpm
+                self.quality = resolved.quality
+                completion(resolved.bpm, resolved.quality)
             }
         }
     }
@@ -296,9 +310,14 @@ final class HeartRateEngine: NSObject, ObservableObject {
             estimatedFPS: estimatedFPS
         )
 
+        if let b = result.bpm, result.quality >= MeasurementResultResolver.liveFallbackQualityThreshold {
+            lastAcceptedLiveBPM = b
+            lastAcceptedLiveQuality = result.quality
+        }
+
         DispatchQueue.main.async {
             self.quality = result.quality
-            if let b = result.bpm, result.quality >= 0.32 {
+            if let b = result.bpm, result.quality >= MeasurementResultResolver.liveFallbackQualityThreshold {
                 self.bpm = b
             }
         }

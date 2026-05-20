@@ -147,6 +147,17 @@ enum SignalProcessor {
             return Estimate(bpm: nil, quality: qLegacy * 0.35)
         }
 
+        let bpmSpread: Double
+        if bpms.count >= 5 {
+            let sorted = bpms.sorted()
+            let q1 = sorted[sorted.count / 4]
+            let q3 = sorted[(sorted.count * 3) / 4]
+            bpmSpread = max(0, q3 - q1)
+        } else {
+            bpmSpread = 6
+        }
+
+        let qStability = 1 - min(1, bpmSpread / max(med * 0.12, 2))
         let spectral = spectralEstimate(signal: smoothed, sampleRate: fps)
 
         let agreement: Double
@@ -159,6 +170,13 @@ enum SignalProcessor {
                 if harmonicAgreement <= 12, qLegacy >= 0.24 {
                     return Estimate(bpm: Int(round(med)), quality: max(q, 0.24))
                 }
+                let intervalFallbackQuality = max(
+                    q,
+                    min(0.52, 0.55 * qLegacy + 0.45 * qStability)
+                )
+                if qLegacy >= 0.32, qStability >= 0.45, spectral.dominance < 0.22 {
+                    return Estimate(bpm: Int(round(med)), quality: intervalFallbackQuality)
+                }
                 return Estimate(bpm: nil, quality: q)
             }
             agreementScore = 1 - min(1, agreement / 14)
@@ -166,18 +184,6 @@ enum SignalProcessor {
             agreement = 14
             agreementScore = 0.35
         }
-
-        let bpmSpread: Double
-        if bpms.count >= 5 {
-            let sorted = bpms.sorted()
-            let q1 = sorted[sorted.count / 4]
-            let q3 = sorted[(sorted.count * 3) / 4]
-            bpmSpread = max(0, q3 - q1)
-        } else {
-            bpmSpread = 6
-        }
-
-        let qStability = 1 - min(1, bpmSpread / max(med * 0.12, 2))
         let mean = s.reduce(0, +) / Double(s.count)
         let rawStd = sqrt(s.map { pow($0 - mean, 2) }.reduce(0, +) / Double(max(s.count - 1, 1)))
         let amplitudeScore = min(1, rawStd / 0.75)

@@ -100,6 +100,35 @@ final class SignalProcessorTests: XCTestCase {
         XCTAssertLessThan(estimate.quality, 0.35, "Random noise should produce low signal quality")
     }
 
+    func testFinalEstimateAcceptsLowAmplitudeRhythmicSignal() {
+        let signal = makeLowAmplitudePPG(bpm: 65, fps: 30, duration: 65.0)
+
+        let estimate = SignalProcessor.finalEstimate(
+            samples: signal.samples,
+            times: signal.times,
+            estimatedFPS: 30
+        )
+
+        XCTAssertNotNil(estimate.bpm, "A weak but steady pulse should still produce a final reading")
+        XCTAssertGreaterThanOrEqual(estimate.quality, 0.22)
+        if let bpm = estimate.bpm {
+            XCTAssertEqual(bpm, 65, accuracy: 10)
+        }
+    }
+
+    func testMeasurementResultResolverFallsBackToStableLiveReading() {
+        let resolved = MeasurementResultResolver.resolve(
+            finalBPM: nil,
+            finalQuality: 0.19,
+            liveFallbackBPM: 72,
+            liveFallbackQuality: 0.41
+        )
+
+        XCTAssertEqual(resolved.bpm, 72)
+        XCTAssertGreaterThanOrEqual(resolved.quality, 0.22)
+        XCTAssertTrue(resolved.usedLiveFallback)
+    }
+
     private func makeSyntheticPPG(
         bpm: Double,
         fps: Double,
@@ -135,6 +164,27 @@ final class SignalProcessorTests: XCTestCase {
             let noise = Double.random(in: -0.01...0.01, using: &rng)
             let dropout = i > 0 && i % 37 == 0 ? -pulse : 0
             samples.append(0.4 + pulse + drift + noise + dropout)
+        }
+
+        return (samples, times)
+    }
+
+    private func makeLowAmplitudePPG(bpm: Double, fps: Double, duration: Double) -> (samples: [Double], times: [Double]) {
+        let count = Int(duration * fps)
+        var rng = SeededGenerator(seed: 65)
+        var samples: [Double] = []
+        var times: [Double] = []
+        let beatFreqHz = bpm / 60.0
+
+        for i in 0..<count {
+            let t = Double(i) / fps
+            times.append(t)
+            let phase = 2 * Double.pi * beatFreqHz * t
+            let base = sin(phase) + 0.25 * sin(2.0 * phase + 0.8)
+            let drift = 0.006 * sin(2.0 * Double.pi * t / 12.0)
+            let noise = Double.random(in: -0.006...0.006, using: &rng)
+            let dropout = i > 0 && i % 53 == 0 ? -(0.012 * base) : 0
+            samples.append(0.55 + 0.012 * base + drift + noise + dropout)
         }
 
         return (samples, times)

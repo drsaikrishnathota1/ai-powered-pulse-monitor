@@ -418,7 +418,7 @@ struct MeasureView: View {
         }
 
         engine.finalizeAndStop { bpm, quality in
-            guard let bpm, quality >= 0.22 else {
+            guard let bpm, quality >= MeasurementResultResolver.finalQualityThreshold else {
                 sessionMessage = .lowSignal
                 engine.resetBuffers()
                 return

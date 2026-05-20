@@ -30,3 +30,32 @@ struct HeartReading: Identifiable, Codable, Equatable {
         self.note = note
     }
 }
+
+struct MeasurementResolution {
+    let bpm: Int?
+    let quality: Double
+    let usedLiveFallback: Bool
+}
+
+enum MeasurementResultResolver {
+    static let finalQualityThreshold = 0.22
+    static let liveFallbackQualityThreshold = 0.32
+
+    static func resolve(
+        finalBPM: Int?,
+        finalQuality: Double,
+        liveFallbackBPM: Int?,
+        liveFallbackQuality: Double
+    ) -> MeasurementResolution {
+        if let finalBPM, finalQuality >= finalQualityThreshold {
+            return MeasurementResolution(bpm: finalBPM, quality: finalQuality, usedLiveFallback: false)
+        }
+
+        guard let liveFallbackBPM, liveFallbackQuality >= liveFallbackQualityThreshold else {
+            return MeasurementResolution(bpm: finalBPM, quality: finalQuality, usedLiveFallback: false)
+        }
+
+        let fallbackQuality = max(finalQuality, min(0.75, liveFallbackQuality * 0.92))
+        return MeasurementResolution(bpm: liveFallbackBPM, quality: fallbackQuality, usedLiveFallback: true)
+    }
+}
