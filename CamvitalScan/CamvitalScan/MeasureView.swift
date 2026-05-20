@@ -384,9 +384,7 @@ struct MeasureView: View {
                 .font(.footnote)
                 .foregroundStyle(.white.opacity(0.82))
 
-            Text("This screen shows pulse only. Blood pressure values like 120/80 require a cuff or another validated BP monitor.")
-                .font(.caption2)
-                .foregroundStyle(.white.opacity(0.48))
+            bloodPressureReferenceSection
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -412,6 +410,57 @@ struct MeasureView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 9)
         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.white.opacity(0.055)))
+    }
+
+    private var bloodPressureReferenceSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Blood pressure example")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.white.opacity(0.56))
+
+            HStack(alignment: .top, spacing: 10) {
+                pressureReferenceMetric(
+                    title: "Systolic",
+                    value: "120",
+                    unit: "mmHg",
+                    detail: "Top number: pressure in the arteries while the heart beats."
+                )
+                pressureReferenceMetric(
+                    title: "Diastolic",
+                    value: "80",
+                    unit: "mmHg",
+                    detail: "Bottom number: pressure in the arteries while the heart rests between beats."
+                )
+            }
+
+            Text("Reference only: this camera scan measures pulse, not blood pressure. Use a validated upper-arm cuff monitor for BP numbers.")
+                .font(.caption2)
+                .foregroundStyle(.white.opacity(0.5))
+        }
+    }
+
+    private func pressureReferenceMetric(title: String, value: String, unit: String, detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.white.opacity(0.58))
+
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(value)
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+                Text(unit)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.55))
+            }
+
+            Text(detail)
+                .font(.caption2)
+                .foregroundStyle(.white.opacity(0.68))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.white.opacity(0.055)))
     }
 
     private var qualityBar: some View {
