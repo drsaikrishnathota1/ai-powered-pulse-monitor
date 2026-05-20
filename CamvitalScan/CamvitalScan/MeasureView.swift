@@ -14,11 +14,27 @@ struct MeasureView: View {
     @State private var secondsLeft: Int = Int(MeasurementConstants.captureDurationSeconds)
     @State private var showDenied = false
     @State private var sessionMessage: SessionMessage?
+    @State private var latestReading: HeartReading?
 
     private let timer = Timer.publish(every: 0.05, on: .main, in: .common).autoconnect()
     private let successHaptic = UINotificationFeedbackGenerator()
 
     private var captureDuration: TimeInterval { MeasurementConstants.captureDurationSeconds }
+    private var displayedBPM: Int? { isMeasuring ? engine.bpm : latestReading?.bpm }
+    private var displayedQuality: Double { isMeasuring ? engine.quality : (latestReading?.quality ?? 0) }
+    private var hasCompletedReading: Bool { !isMeasuring && latestReading != nil }
+    private var timerLabel: String {
+        if isMeasuring {
+            return "\(secondsLeft / 60):\(String(format: "%02d", secondsLeft % 60))"
+        }
+        return hasCompletedReading ? "Done" : "1:00"
+    }
+    private var recentAverageBPM: Int? {
+        let recentReadings = Array(history.readings.prefix(7))
+        guard !recentReadings.isEmpty else { return nil }
+        let total = recentReadings.reduce(0) { $0 + $1.bpm }
+        return Int(round(Double(total) / Double(recentReadings.count)))
+    }
 
     var body: some View {
         NavigationStack {
@@ -155,7 +171,7 @@ struct MeasureView: View {
             HStack(spacing: 10) {
                 statusBadge
                 Spacer()
-                Text(isMeasuring ? "\(secondsLeft / 60):\(String(format: "%02d", secondsLeft % 60))" : "1:00")
+                Text(timerLabel)
                     .font(.headline.monospacedDigit().weight(.bold))
                     .foregroundStyle(isMeasuring ? PulseTheme.accent : .white.opacity(0.72))
             }
@@ -179,17 +195,17 @@ struct MeasureView: View {
                     .animation(.easeInOut(duration: 0.15), value: progress)
 
                 VStack(spacing: 10) {
-                    Text(engine.bpm.map { "\($0)" } ?? "—")
+                    Text(displayedBPM.map { "\($0)" } ?? "—")
                         .font(.system(size: 56, weight: .bold, design: .rounded))
                         .foregroundStyle(.white)
                         .contentTransition(.numericText())
-                    Text(isMeasuring ? "LIVE BPM" : "BPM")
+                    Text(isMeasuring ? "LIVE BPM" : (hasCompletedReading ? "LATEST BPM" : "BPM"))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.white.opacity(0.55))
 
                     qualityBar
 
-                    if let bpm = engine.bpm {
+                    if let bpm = displayedBPM {
                         let zone = PulseHeartZone.zone(for: bpm, age: settings.age)
                         Text(zone.title)
                             .font(.footnote.weight(.semibold))
@@ -201,12 +217,17 @@ struct MeasureView: View {
                 }
             }
 
-            readinessStrip
-
-            waveform
+            if isMeasuring {
+                readinessStrip
+                waveform
+            } else if let latestReading {
+                resultSummaryCard(for: latestReading)
+            } else {
+                readinessStrip
+            }
 
             Button(action: toggleMeasure) {
-                Label(isMeasuring ? "Stop session" : "Start 1-minute scan", systemImage: isMeasuring ? "stop.fill" : "waveform.path.ecg")
+                Label(isMeasuring ? "Stop session" : (hasCompletedReading ? "Scan again" : "Start 1-minute scan"), systemImage: isMeasuring ? "stop.fill" : "waveform.path.ecg")
                     .font(.headline)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
@@ -235,7 +256,10 @@ struct MeasureView: View {
     }
 
     private var statusBadge: some View {
-        Label(isMeasuring ? "Scanning" : "Ready", systemImage: isMeasuring ? "dot.radiowaves.left.and.right" : "checkmark.seal.fill")
+        Label(
+            isMeasuring ? "Scanning" : (hasCompletedReading ? "Result ready" : "Ready"),
+            systemImage: isMeasuring ? "dot.radiowaves.left.and.right" : (hasCompletedReading ? "checkmark.circle.fill" : "checkmark.seal.fill")
+        )
             .font(.subheadline.weight(.semibold))
             .foregroundStyle(isMeasuring ? PulseTheme.accent : PulseTheme.success)
             .padding(.horizontal, 12)
@@ -298,6 +322,98 @@ struct MeasureView: View {
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(PulseTheme.stroke))
     }
 
+    private func resultSummaryCard(for reading: HeartReading) -> some View {
+        let insight = PulseReadingInsight.reading(for: reading.bpm)
+
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Latest result")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.55))
+                    Text(reading.date.formatted(date: .omitted, time: .shortened))
+                        .font(.caption2)
+                        .foregroundStyle(.white.opacity(0.46))
+                }
+
+                Spacer()
+
+                Label("Saved to history", systemImage: "clock.arrow.circlepath")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.7))
+            }
+
+            HStack(alignment: .top, spacing: 14) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(insight.badge)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(insight.tint)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Capsule().fill(insight.tint.opacity(0.14)))
+
+                    Text(insight.title)
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.white)
+
+                    Text(insight.detail)
+                        .font(.footnote)
+                        .foregroundStyle(.white.opacity(0.7))
+                }
+
+                Spacer(minLength: 12)
+
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("\(reading.bpm)")
+                        .font(.system(size: 42, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white)
+                    Text("BPM")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.55))
+                }
+            }
+
+            HStack(spacing: 10) {
+                resultMetricChip(title: "Signal", value: "\(Int(reading.quality * 100))%", systemImage: "waveform.path")
+                if let recentAverageBPM {
+                    resultMetricChip(title: "Recent avg", value: "\(recentAverageBPM) BPM", systemImage: "chart.line.uptrend.xyaxis")
+                }
+            }
+
+            Text(insight.suggestion)
+                .font(.footnote)
+                .foregroundStyle(.white.opacity(0.82))
+
+            Text("This screen shows pulse only. Blood pressure values like 120/80 require a cuff or another validated BP monitor.")
+                .font(.caption2)
+                .foregroundStyle(.white.opacity(0.48))
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.white.opacity(0.05)))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(PulseTheme.stroke))
+    }
+
+    private func resultMetricChip(title: String, value: String, systemImage: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: systemImage)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(PulseTheme.accent)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.5))
+                Text(value)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.88))
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 9)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.white.opacity(0.055)))
+    }
+
     private var qualityBar: some View {
         VStack(spacing: 4) {
             HStack {
@@ -305,7 +421,7 @@ struct MeasureView: View {
                     .font(.caption2.weight(.medium))
                     .foregroundStyle(.white.opacity(0.45))
                 Spacer()
-                Text("\(Int(engine.quality * 100))%")
+                Text("\(Int(displayedQuality * 100))%")
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(.white.opacity(0.65))
             }
@@ -314,7 +430,7 @@ struct MeasureView: View {
                     Capsule().fill(Color.white.opacity(0.08))
                     Capsule()
                         .fill(PulseTheme.waveGradient)
-                        .frame(width: max(8, geo.size.width * engine.quality))
+                        .frame(width: max(8, geo.size.width * displayedQuality))
                 }
             }
             .frame(height: 8)
@@ -394,6 +510,7 @@ struct MeasureView: View {
 
     private func beginMeasurement() {
         sessionMessage = nil
+        latestReading = nil
         engine.start()
         isMeasuring = true
         startDate = .now
@@ -406,7 +523,7 @@ struct MeasureView: View {
         isMeasuring = false
         startDate = nil
         progress = cancelled ? 0 : 1
-        secondsLeft = Int(captureDuration)
+        secondsLeft = cancelled ? Int(captureDuration) : 0
 
         if cancelled {
             sessionMessage = .cancelled
@@ -420,6 +537,9 @@ struct MeasureView: View {
         engine.finalizeAndStop { bpm, quality in
             guard let bpm, quality >= MeasurementResultResolver.finalQualityThreshold else {
                 sessionMessage = .lowSignal
+                latestReading = nil
+                progress = 0
+                secondsLeft = Int(captureDuration)
                 engine.resetBuffers()
                 return
             }
@@ -429,7 +549,8 @@ struct MeasureView: View {
                 durationSeconds: Int(MeasurementConstants.captureDurationSeconds)
             )
             history.add(reading)
-            sessionMessage = .saved(bpm: bpm, quality: quality)
+            latestReading = reading
+            sessionMessage = nil
             successHaptic.notificationOccurred(.success)
 
             if settings.saveToHealth {
@@ -439,6 +560,59 @@ struct MeasureView: View {
             }
 
             engine.resetBuffers()
+        }
+    }
+}
+
+struct PulseReadingInsight {
+    let badge: String
+    let title: String
+    let detail: String
+    let suggestion: String
+    let tint: Color
+
+    static func reading(for bpm: Int) -> PulseReadingInsight {
+        switch bpm {
+        case ..<50:
+            return PulseReadingInsight(
+                badge: "Low pulse",
+                title: "Lower than a typical resting pulse",
+                detail: "This can happen during deep rest or in very fit people, but it is worth a second check if this feels unusual for you.",
+                suggestion: "Sit quietly and repeat once more. If readings stay low for you or you feel weak, dizzy, or faint, seek medical advice.",
+                tint: PulseTheme.accent2
+            )
+        case 50..<60:
+            return PulseReadingInsight(
+                badge: "Calm pulse",
+                title: "On the lower side of a resting pulse",
+                detail: "A slower resting pulse can be normal, especially if you are relaxed or physically fit.",
+                suggestion: "Use repeated readings in similar conditions to learn your personal baseline rather than judging one scan in isolation.",
+                tint: PulseTheme.accent
+            )
+        case 60...100:
+            return PulseReadingInsight(
+                badge: "Typical resting pulse",
+                title: "Within a common resting range",
+                detail: "The American Heart Association notes that a normal resting heart rate for many adults falls between 60 and 100 BPM.",
+                suggestion: "The most useful pattern comes from repeat scans at the same time of day and in the same calm posture.",
+                tint: PulseTheme.success
+            )
+        case 101...120:
+            return PulseReadingInsight(
+                badge: "High resting pulse",
+                title: "Higher than a typical resting pulse",
+                detail: "Stress, movement, caffeine, heat, or an imperfect finger seal can push a resting read upward.",
+                suggestion: "Rest for a few minutes, hydrate, and repeat while staying fully still. If it keeps happening at rest, talk with a clinician.",
+                tint: PulseTheme.caution
+            )
+        default:
+            return PulseReadingInsight(
+                badge: "Very high resting pulse",
+                title: "Quite elevated for a calm reading",
+                detail: "Motion can inflate a camera-based scan, but a true resting pulse this high deserves extra attention.",
+                suggestion: "Repeat once after resting quietly. If it stays high or you feel chest pain, shortness of breath, dizziness, or faintness, seek urgent care.",
+                tint: PulseTheme.coral
+            )
         }
     }
 }

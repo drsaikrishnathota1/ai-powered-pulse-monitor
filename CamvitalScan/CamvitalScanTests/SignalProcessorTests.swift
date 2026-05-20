@@ -129,6 +129,20 @@ final class SignalProcessorTests: XCTestCase {
         XCTAssertTrue(resolved.usedLiveFallback)
     }
 
+    func testPulseReadingInsightMarksTypicalRestingPulse() {
+        let insight = PulseReadingInsight.reading(for: 72)
+
+        XCTAssertEqual(insight.badge, "Typical resting pulse")
+        XCTAssertTrue(insight.title.contains("common resting range"))
+    }
+
+    func testPulseReadingInsightMarksHighRestingPulse() {
+        let insight = PulseReadingInsight.reading(for: 112)
+
+        XCTAssertEqual(insight.badge, "High resting pulse")
+        XCTAssertTrue(insight.suggestion.contains("Rest for a few minutes"))
+    }
+
     private func makeSyntheticPPG(
         bpm: Double,
         fps: Double,
